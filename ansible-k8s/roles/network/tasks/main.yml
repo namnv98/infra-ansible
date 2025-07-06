@@ -1,0 +1,8 @@
+- name: Apply Calico CNI
+  command: kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.27.0/manifests/calico.yaml
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  register: calico_result
+  retries: 5
+  delay: 10
+  until: calico_result.rc == 0

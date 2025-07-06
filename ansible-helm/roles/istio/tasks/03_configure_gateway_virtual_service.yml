@@ -1,0 +1,74 @@
+- name: Cài đặt Istio Gateway và VirtualService cho ứng dụng
+  become: true
+  block:
+    - name: Gán label cho namespace để bật sidecar injection
+      vars:
+        all_namespaces: "{{ app_configs | map(attribute='namespace') | unique }}"
+      shell: |
+        for ns in {{ all_namespaces | join(' ') }}; do
+          kubectl label namespace $ns istio-injection=enabled --overwrite;
+        done
+      args:
+        executable: /bin/bash
+
+    - name: Tạo và apply Gateway Istio (HTTP + HTTPS)
+      shell: |
+        cat <<EOF | kubectl apply -f -
+        apiVersion: networking.istio.io/v1
+        kind: Gateway
+        metadata:
+          name: istio-shared-gateway
+          namespace: {{ istio_namespace }}
+        spec:
+          selector:
+            istio: {{ gateway_selector_istio }}
+          servers:
+          - port:
+              number: 80
+              name: http
+              protocol: HTTP
+            hosts:
+            - "*"
+          - port:
+              number: 443
+              name: https
+              protocol: HTTPS
+            tls:
+              mode: SIMPLE
+              credentialName: {{ credential_name }}
+            hosts:
+            - "*"
+        EOF
+      args:
+        executable: /bin/bash
+
+
+    - name: Tạo và apply VirtualService cho từng app
+      loop: "{{ app_configs }}"
+      loop_control:
+        loop_var: app
+      shell: |
+        cat <<EOF | kubectl apply -f -
+        apiVersion: networking.istio.io/v1beta1
+        kind: VirtualService
+        metadata:
+          name: {{ app.name }}-vs
+          namespace: {{ app.namespace }}
+        spec:
+          hosts:
+          - "*"
+          gateways:
+          - {{ istio_namespace }}/istio-shared-gateway
+          http:
+          - match:
+            - uri:
+                prefix: "{{ app.uri_prefix }}"
+            route:
+            - destination:
+                host: {{ app.name }}.{{ app.namespace }}.svc.cluster.local
+                port:
+                  number: {{ app.port }}
+        EOF
+      args:
+        executable: /bin/bash
+

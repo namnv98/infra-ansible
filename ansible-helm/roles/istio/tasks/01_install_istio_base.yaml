@@ -1,0 +1,25 @@
+- name: Install Istio
+  become: true
+  block:
+    - name: Ensure istio namespace exists
+      shell: kubectl get ns {{ istio_namespace }} || kubectl create ns {{ istio_namespace }}
+
+    - name: Add Istio Helm repo
+      shell: |
+        helm repo add istio https://istio-release.storage.googleapis.com/charts || true
+        helm repo update
+
+    - name: Install istio-base chart
+      shell: helm upgrade --install istio-base istio/base -n {{ istio_namespace }}
+
+    - name: Install istiod chart
+      shell: >
+        helm upgrade --install istiod istio/istiod -n {{ istio_namespace }}
+        --set meshConfig.accessLogFile=/dev/stdout
+        --set global.proxy.autoInject=enabled
+
+    - name: Install Istio ingress gateway
+      shell: helm upgrade --install istio-ingress istio/gateway -n {{ istio_namespace }}
+
+    - name: Enable automatic sidecar injection on default namespace
+      shell: kubectl label namespace default istio-injection=enabled --overwrite

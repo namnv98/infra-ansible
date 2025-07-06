@@ -1,0 +1,34 @@
+- name: Deploy 2 echo apps using http-echo image
+  become: true
+  vars:
+    target_namespace: default
+    echo_apps:
+      - name: my-app-1
+        port: 8080
+        text: "Welcome from my-app-1"
+      - name: my-app-2
+        port: 8080
+        text: "Welcome from my-app-2"
+  environment:
+    KUBECONFIG: /home/namnv/.kube/config
+
+  block:
+    - name: Deploy and expose echo apps
+      loop: "{{ echo_apps }}"
+      loop_control:
+        loop_var: app
+      shell: |
+        kubectl delete deploy {{ app.name }} --ignore-not-found
+        kubectl delete svc {{ app.name }} --ignore-not-found
+
+        kubectl create deploy {{ app.name }} \
+          --image=hashicorp/http-echo \
+          --port={{ app.port }} \
+          -n {{ target_namespace }} \
+          -- /http-echo -listen=:{{ app.port }} -text="{{ app.text }}" -status-code=200 || true
+
+        kubectl expose deploy {{ app.name }} \
+          --port={{ app.port }} --target-port={{ app.port }} \
+          -n {{ target_namespace }} || true
+      args:
+        executable: /bin/bash

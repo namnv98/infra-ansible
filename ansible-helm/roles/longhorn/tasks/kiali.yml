@@ -1,0 +1,66 @@
+- name: Cài đặt Kiali Operator bằng Helm
+  hosts: master
+  become: false
+  gather_facts: false
+  vars:
+    kiali_operator_namespace: kiali-operator
+    kiali_instance_namespace: istio-system
+  tasks:
+
+    - name: Thêm Helm repo của Kiali
+      command: helm repo add kiali https://kiali.org/helm-charts
+      register: kiali_repo
+      changed_when: "'has been added' in kiali_repo.stdout or 'already exists' in kiali_repo.stderr"
+
+    - name: Thêm Helm repo Prometheus Community
+      command: helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+      register: prom_repo
+      changed_when: "'has been added' in prom_repo.stdout or 'already exists' in prom_repo.stderr"
+
+    - name: Cập nhật Helm repo
+      command: helm repo update
+
+    - name: Đảm bảo namespace istio-system tồn tại
+      command: kubectl create namespace {{ kiali_instance_namespace }}
+      register: ns_istio
+      failed_when: ns_istio.rc != 0 and 'AlreadyExists' not in ns_istio.stderr
+      changed_when: "'created' in ns_istio.stdout"
+
+    - name: Cài kube-prometheus-stack (thay cho istio-prometheus)
+      command: >
+        helm upgrade --install kube-prometheus prometheus-community/kube-prometheus-stack
+        --namespace {{ kiali_instance_namespace }} --create-namespace
+
+    - name: Đảm bảo namespace Kiali Operator tồn tại
+      command: kubectl create namespace {{ kiali_operator_namespace }}
+      register: ns_kiali
+      failed_when: ns_kiali.rc != 0 and 'AlreadyExists' not in ns_kiali.stderr
+      changed_when: "'created' in ns_kiali.stdout"
+
+    - name: Cài đặt Kiali Operator bằng Helm
+      command: >
+        helm upgrade --install kiali-operator kiali/kiali-operator
+        --namespace {{ kiali_operator_namespace }}
+
+    - name: Tạo Kiali CR yaml tạm thời
+      copy:
+        dest: /tmp/kiali-cr.yaml
+        content: |
+          apiVersion: kiali.io/v1alpha1
+          kind: Kiali
+          metadata:
+            name: kiali
+            namespace: {{ kiali_instance_namespace }}
+          spec:
+            auth:
+              strategy: anonymous
+            deployment:
+              accessible_namespaces:
+                - "**"
+            external_services:
+              prometheus:
+                url: "http://kube-prometheus-kube-prome-prometheus.{{ kiali_instance_namespace }}.svc.cluster.local:9090"
+    
+
+    - name: Áp dụng Kiali CR bằng kubectl
+      command: kubectl apply -f /tmp/kiali-cr.yaml

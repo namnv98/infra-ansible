@@ -1,0 +1,41 @@
+- name: Deploy 2 echo apps using http-echo image
+  become: true
+  vars:
+    cert_manager_version: "v1.14.4"
+    clusterissuer_name: "selfsigned-issuer"
+  environment:
+    KUBECONFIG: /home/namnv/.kube/config
+
+  block:
+    - name: Tạo namespace cert-manager
+      command: kubectl create namespace cert-manager
+      register: cert_ns
+      failed_when: cert_ns.rc != 0 and 'AlreadyExists' not in cert_ns.stderr
+      changed_when: "'created' in cert_ns.stdout"
+
+    - name: Cài đặt cert-manager bằng manifest chính thức
+      command: >
+        kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/{{ cert_manager_version }}/cert-manager.yaml
+
+    - name: Chờ cert-manager pod sẵn sàng
+      command: >
+        kubectl rollout status deploy/cert-manager -n cert-manager --timeout=180s
+      retries: 20
+      delay: 10
+      register: rollout
+      until: rollout.rc == 0
+
+    - name: Tạo ClusterIssuer self-signed
+      copy:
+        dest: /tmp/clusterissuer-selfsigned.yaml
+        content: |
+          apiVersion: cert-manager.io/v1
+          kind: ClusterIssuer
+          metadata:
+            name: {{ clusterissuer_name }}
+          spec:
+            selfSigned: {}
+      register: issuer_file
+
+    - name: Áp dụng ClusterIssuer self-signed
+      command: kubectl apply -f /tmp/clusterissuer-selfsigned.yaml

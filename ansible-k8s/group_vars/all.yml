@@ -1,0 +1,23 @@
+arch_map:
+  x86_64: amd64
+  aarch64: arm64
+  armv7l: arm
+arch: "{{ arch_map[ansible_architecture] | default(ansible_architecture) }}"
+
+apiserver_advertise_address: 192.168.56.10
+pod_network_cidr: 172.16.1.0/16
+apiserver_cert_sans:
+  - 192.168.56.10
+
+cri_socket: "unix:///run/containerd/containerd.sock"
+
+
+# install k8s
+cni_plugins_version: 1.7.1 #https://github.com/containernetworking/plugins/releases
+crictl_version: 1.31.0 #https://github.com/kubernetes-sigs/cri-tools/releases
+kubelet_service_version: 0.18.0 #https://github.com/kubernetes/release/releases
+kubernetes_version: 1.33.2  #https://cdn.dl.k8s.io/release/stable.txt
+
+# install containerd
+containerd_version: 2.1.3
+opencontainers_runc_version: 1.3.0

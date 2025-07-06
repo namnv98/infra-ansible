@@ -1,0 +1,35 @@
+- name: Tạo TLS Certificate bằng cert-manager cho Istio Gateway
+  become: true
+  vars:
+    local_tls_cert_path: "{{ playbook_dir }}/files/tls.crt"
+    local_tls_key_path: "{{ playbook_dir }}/files/tls.key"
+    remote_tls_cert_path: /tmp/tls.crt
+    remote_tls_key_path: /tmp/tls.key
+  block:
+    - name: Copy TLS certificate to target
+      copy:
+        src: "{{ local_tls_cert_path }}"
+        dest: "{{ remote_tls_cert_path }}"
+        mode: '0644'
+
+    - name: Copy TLS private key to target
+      copy:
+        src: "{{ local_tls_key_path }}"
+        dest: "{{ remote_tls_key_path }}"
+        mode: '0600'
+
+    - name: Ensure istio-system namespace exists
+      shell: kubectl get ns istio-system || kubectl create ns istio-system
+      args:
+        executable: /bin/bash
+
+    - name: Create Kubernetes TLS secret for Istio (on master node)
+      shell: |
+        kubectl create secret tls my-custom-cert \
+          --cert="{{ remote_tls_cert_path }}" \
+          --key="{{ remote_tls_key_path }}" \
+          -n {{ istio_namespace }} --dry-run=client -o yaml | \
+        kubectl apply --validate=false -f -
+      args:
+        executable: /bin/bash
+

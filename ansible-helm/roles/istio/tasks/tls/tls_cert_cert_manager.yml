@@ -1,0 +1,31 @@
+- name: Tạo TLS Certificate bằng cert-manager cho Istio Gateway
+  become: true
+  block:
+    - name: Ensure istio-system namespace exists
+      shell: kubectl get ns istio-system || kubectl create ns istio-system
+      args:
+        executable: /bin/bash
+
+    - name: Tạo cert-manager Certificate tự ký cho echo app
+      copy:
+        dest: /tmp/echo-certificate.yaml
+        content: |
+          apiVersion: cert-manager.io/v1
+          kind: Certificate
+          metadata:
+            name: echo-cert
+            namespace: {{ istio_namespace }}
+          spec:
+            secretName: echo-tls
+            duration: 2160h
+            renewBefore: 360h
+            commonName: namnv.tech.com
+            dnsNames:
+              - namnv.tech.com
+            issuerRef:
+              name: selfsigned-issuer
+              kind: ClusterIssuer
+      register: cert_file
+
+    - name: Áp dụng Certificate cho echo app
+      command: kubectl apply -f /tmp/echo-certificate.yaml

@@ -1,0 +1,29 @@
+# roles/istio/tasks/peer-strict.yml
+
+- name: Tạo file PeerAuthentication STRICT cho từng namespace
+  become: true
+  copy:
+    dest: "/tmp/peerauthn-strict-{{ item }}.yaml"
+    content: |
+      apiVersion: security.istio.io/v1beta1
+      kind: PeerAuthentication
+      metadata:
+        name: default
+        namespace: {{ item }}
+      spec:
+        mtls:
+          mode: STRICT
+  loop:
+    - default
+  loop_control:
+    loop_var: item
+
+- name: Áp dụng PeerAuthentication STRICT cho từng namespace
+  become: true
+  shell: kubectl apply -f "/tmp/peerauthn-strict-{{ item }}.yaml"
+  args:
+    executable: /bin/bash
+  loop:
+    - default
+  loop_control:
+    loop_var: item

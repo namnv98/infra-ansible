@@ -1,0 +1,8 @@
+- name: Install all components
+  hosts: master
+  become: true
+  roles:
+    - role: install_helm
+    - role: cert-manager
+    - role: istio
+    - role: test

@@ -1,0 +1,24 @@
+- name: Install Istio Ingress Gateway
+  become: true
+  block:
+    - name: Create custom values file to set NodePort
+      copy:
+        dest: /tmp/istio-ingress-values.yaml
+        content: |
+          labels:
+            istio: {{ gateway_selector_istio }}
+          service:
+            type: NodePort
+            ports:
+              - name: http2
+                port: 80
+                nodePort: 32080
+              - name: https
+                port: 443
+                nodePort: 32443
+
+    - name: Install Istio ingress gateway with NodePort service
+      shell: >
+        helm upgrade --install {{ gateway_release_name }} istio/gateway
+        -n {{ istio_namespace }} --create-namespace
+        -f /tmp/istio-ingress-values.yaml

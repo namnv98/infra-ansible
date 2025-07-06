@@ -1,0 +1,34 @@
+- name: Install Istio
+  become: true
+  vars:
+    istio_namespace: istio-system
+    gateway_selector_istio: istio-ingress-gateway
+    gateway_release_name: istio-ingress-gateway
+    credential_name: echo-tls
+    app_configs:
+      - name: my-app-1
+        port: 8080
+        uri_prefix: /my-app-1
+        namespace: default
+      - name: my-app-2
+        port: 8080
+        uri_prefix: /my-app-2
+        namespace: default
+  environment:
+    KUBECONFIG: /home/namnv/.kube/config
+
+  block:
+    - name: Install Istio Base
+      import_tasks: 01_install_istio_base.yaml
+
+    - name: Install Istio Ingress Gateway
+      import_tasks: 02_install_istio_ingress_gateway.yml
+
+    - name: Configure Istio Gateway and VirtualServices
+      import_tasks: 03_configure_gateway_virtual_service.yml
+
+    - name: Configure TLS
+      import_tasks: tls/tls_cert_cert_manager.yml
+
+    - name: peer strict
+      import_tasks: peer-strict.yml

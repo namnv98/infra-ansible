@@ -1,0 +1,23 @@
+- name: Uninstall Kubernetes and CRI-O
+  hosts: all
+  become: true
+  tasks:
+    - name: Stop and disable services
+      service:
+        name: "{{ item }}"
+        state: stopped
+        enabled: no
+      loop:
+        - kubelet
+        - crio
+
+    - name: Remove Kubernetes and CRI-O packages
+      package:
+        name: "{{ item }}"
+        state: absent
+      loop:
+        - kubeadm
+        - kubelet
+        - kubectl
+        - cri-o
+        - cri-o-runc
