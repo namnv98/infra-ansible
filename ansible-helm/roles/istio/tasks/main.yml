@@ -14,9 +14,6 @@
         port: 8080
         uri_prefix: /my-app-2
         namespace: default
-  environment:
-    KUBECONFIG: /home/namnv/.kube/config
-
   block:
     - name: Install Istio Base
       import_tasks: 01_install_istio_base.yaml

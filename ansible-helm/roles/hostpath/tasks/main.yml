@@ -1,0 +1,29 @@
+- name: Install hostPath StorageClass as default
+  become: true
+  vars:
+    hostpath_storage_class: hostpath
+  block:
+
+    - name: Create default hostPath StorageClass
+      shell: |
+        cat <<EOF | kubectl apply -f -
+        apiVersion: storage.k8s.io/v1
+        kind: StorageClass
+        metadata:
+          name: {{ hostpath_storage_class }}
+          annotations:
+            storageclass.kubernetes.io/is-default-class: "true"
+        provisioner: kubernetes.io/no-provisioner
+        volumeBindingMode: WaitForFirstConsumer
+        EOF
+      args:
+        executable: /bin/bash
+
+    - name: Remove default annotation from other StorageClasses (if any)
+      shell: |
+        kubectl get storageclass -o json | jq -r \
+          '.items[] | select(.metadata.name != "{{ hostpath_storage_class }}") | select(.metadata.annotations["storageclass.kubernetes.io/is-default-class"] == "true") | .metadata.name' | \
+        xargs -r -n1 kubectl patch storageclass \
+          -p '{"metadata": {"annotations": {"storageclass.kubernetes.io/is-default-class": "false"}}}'
+      args:
+        executable: /bin/bash

@@ -1,0 +1,39 @@
+- name: Cài đặt Vault bằng Helm chart thông qua shell
+  become: true
+  vars:
+    vault_namespace: vault
+    vault_release_name: vault
+    vault_helm_chart: hashicorp/vault
+    vault_helm_version: "0.28.0"
+    vault_helm_values_file: /tmp/vault-values.yaml
+  block:
+    - name: Tạo namespace nếu chưa tồn tại
+      shell: |
+        kubectl get ns {{ vault_namespace }} || kubectl create ns {{ vault_namespace }}
+      args:
+        executable: /bin/bash
+
+    - name: Thêm Helm repo HashiCorp
+      shell: helm repo add hashicorp https://helm.releases.hashicorp.com || true
+
+    - name: Cập nhật Helm repo
+      shell: helm repo update
+
+    - name: Tạo file cấu hình values.yaml cho Vault
+      copy:
+        dest: "{{ vault_helm_values_file }}"
+        content: |
+          server:
+            dev:
+              enabled: true
+
+    - name: Cài đặt hoặc nâng cấp Vault bằng Helm
+      shell: |
+        helm upgrade --install {{ vault_release_name }} {{ vault_helm_chart }} \
+          --namespace {{ vault_namespace }} \
+          --version {{ vault_helm_version }} \
+          -f {{ vault_helm_values_file }}
+      args:
+        executable: /bin/bash
+
+#        kubectl logs -n vault vault-0 | grep 'Root Token'

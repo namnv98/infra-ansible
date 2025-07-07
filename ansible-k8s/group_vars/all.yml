@@ -4,10 +4,16 @@ arch_map:
   armv7l: arm
 arch: "{{ arch_map[ansible_architecture] | default(ansible_architecture) }}"
 
-apiserver_advertise_address: 192.168.56.10
+# CIDR cho Pod network (dùng cho CNI plugin như Calico, Flannel, v.v.)
 pod_network_cidr: 172.16.1.0/16
+
+# IP nội bộ để kube-apiserver lắng nghe (phải tồn tại trên máy xem bằng `ip a`), nếu dùng GCP là Internal IP
+apiserver_advertise_address: 10.148.0.35
+
+# SANs cho chứng chỉ kube-apiserver (Internal IP + External IP)
 apiserver_cert_sans:
-  - 192.168.56.10
+  - 10.148.0.35
+  - 34.124.237.41
 
 cri_socket: "unix:///run/containerd/containerd.sock"
 

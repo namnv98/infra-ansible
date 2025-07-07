@@ -1,9 +1,8 @@
 - name: Ensure Helm is installed
   shell: |
-    if ! command -v helm &> /dev/null; then
-      curl -sSL https://get.helm.sh/helm-v3.14.3-linux-amd64.tar.gz -o /tmp/helm.tar.gz
-      tar -xzf /tmp/helm.tar.gz -C /tmp
-      install /tmp/linux-amd64/helm /usr/local/bin/helm
-    fi
+    curl -sSL https://get.helm.sh/helm-v3.14.3-linux-amd64.tar.gz -o /tmp/helm.tar.gz
+    tar -xzf /tmp/helm.tar.gz -C /tmp
+    install -m 0755 /tmp/linux-amd64/helm /usr/local/bin/helm
   args:
     creates: /usr/local/bin/helm
+  become: true

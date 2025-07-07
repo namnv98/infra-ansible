@@ -8,3 +8,15 @@ ansible-playbook playbooks/install.yml
 #  -keyout tls.key \
 #  -out tls.crt \
 #  -subj "/CN=namnv.tech.com/O=namnv"
+
+
+
+kubectl run curl-test -n longhorn-system \
+  --image=curlimages/curl \
+  --restart=Never \
+  --command -- sleep 3600
+#
+#curl -vk https://longhorn-conversion-webhook.longhorn-system.svc:9501/v1/healthz
+
+
+

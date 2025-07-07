@@ -1,8 +1,12 @@
 - name: Install all components
-  hosts: master
+  hosts: all
   become: true
+  environment:
+    KUBECONFIG: /home/namnv/.kube/config
   roles:
     - role: install_helm
-    - role: cert-manager
-    - role: istio
-    - role: test
+    - role: longhorn
+#    - role: vault
+#    - role: cert-manager
+#    - role: istio
+#    - role: test

@@ -1,118 +1,86 @@
----
-- name: Deploy HashiCorp Vault on Kubernetes
+- name: Cài đặt Vault bằng Helm chart (production-ready)
+  become: true
   vars:
     vault_namespace: vault
-    vault_helm_release_name: vault
+    vault_release_name: vault
     vault_helm_chart: hashicorp/vault
-    vault_helm_repo_url: https://helm.releases.hashicorp.com
-    vault_k8s_auth_path: kubernetes
-    vault_policy_name: myapp-policy
-    vault_role_name: myapp-role
-    vault_sa_name: myapp-sa
-    vault_sa_namespace: default
-
+    vault_helm_version: "0.28.0"
+    vault_helm_values_file: /tmp/vault-values.yaml
+    vault_storage_class: longhorn   # ← thay bằng "standard" nếu không dùng Longhorn
   block:
-    - name: Ensure Vault namespace exists
-      shell: kubectl get ns {{ vault_namespace }} || kubectl create ns {{ vault_namespace }}
+
+    - name: Gỡ cài đặt Vault bằng Helm
+      shell: helm uninstall {{ vault_release_name }} -n {{ vault_namespace }}
+      ignore_errors: true
       args:
         executable: /bin/bash
 
-    - name: Add HashiCorp Helm repo
-      shell: |
-        helm repo add hashicorp {{ vault_helm_repo_url }} || true
-        helm repo update
-
-    - name: Install or upgrade Vault with Helm
-      shell: >
-        helm upgrade --install {{ vault_helm_release_name }} {{ vault_helm_chart }}
-        --namespace {{ vault_namespace }}
-        --create-namespace
-        --set "server.dev.enabled=true"
+    - name: Xóa toàn bộ PVC trong namespace Vault
+      shell: kubectl delete pvc --all -n {{ vault_namespace }}
+      ignore_errors: true
       args:
         executable: /bin/bash
 
-    - name: Wait for Vault pods ready
+    - name: Tạo namespace nếu chưa tồn tại
       shell: |
-        kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=vault -n {{ vault_namespace }} --timeout=120s
+        kubectl get ns {{ vault_namespace }} || kubectl create ns {{ vault_namespace }}
       args:
         executable: /bin/bash
 
-    - name: Get Vault pod name
-      shell: kubectl get pods -n {{ vault_namespace }} -l app.kubernetes.io/name=vault -o jsonpath='{.items[0].metadata.name}'
-      register: vault_pod
-      args:
-        executable: /bin/bash
+    - name: Thêm Helm repo HashiCorp
+      shell: helm repo add hashicorp https://helm.releases.hashicorp.com || true
 
-    - name: Port-forward Vault for API access (background)
-      shell: |
-        kubectl port-forward -n {{ vault_namespace }} {{ vault_pod.stdout }} 8200:8200 &
-      async: 5
-      poll: 0
-      args:
-        executable: /bin/bash
+    - name: Cập nhật Helm repo
+      shell: helm repo update
 
-    - name: Set VAULT_ADDR env variable
-      set_fact:
-        vault_addr: "http://127.0.0.1:8200"
-
-    - name: Initialize Vault (only if not initialized)
-      shell: |
-        vault status || vault operator init -key-shares=1 -key-threshold=1 -format=json > /tmp/vault_init.json
-      environment:
-        VAULT_ADDR: "{{ vault_addr }}"
-      register: vault_init
-      failed_when: false
-      changed_when: "'Initialized' in vault_init.stdout"
-
-    - name: Unseal Vault
-      shell: |
-        vault operator unseal $(jq -r '.unseal_keys_b64[0]' /tmp/vault_init.json)
-      environment:
-        VAULT_ADDR: "{{ vault_addr }}"
-      when: vault_init.stdout.find('Sealed') != -1
-
-    - name: Login Vault as root
-      shell: |
-        vault login $(jq -r '.root_token' /tmp/vault_init.json)
-      environment:
-        VAULT_ADDR: "{{ vault_addr }}"
-
-    - name: Enable Kubernetes auth method
-      shell: |
-        vault auth enable {{ vault_k8s_auth_path }} || true
-      environment:
-        VAULT_ADDR: "{{ vault_addr }}"
-
-    - name: Configure Kubernetes auth method with service account issuer and CA
-      shell: |
-        vault write auth/{{ vault_k8s_auth_path }}/config \
-          token_reviewer_jwt="$(kubectl get secret $(kubectl get sa {{ vault_sa_name }} -n {{ vault_sa_namespace }} -o jsonpath='{.secrets[0].name}') -n {{ vault_sa_namespace }} -o jsonpath='{.data.token}' | base64 --decode)" \
-          kubernetes_host="https://$(kubectl config view --raw -o jsonpath='{.clusters[0].cluster.server}')" \
-          kubernetes_ca_cert="$(kubectl config view --raw -o jsonpath='{.clusters[0].cluster.certificate-authority-data}' | base64 --decode)"
-      environment:
-        VAULT_ADDR: "{{ vault_addr }}"
-
-    - name: Create Vault policy for myapp
+    - name: Tạo file cấu hình values.yaml cho Vault (HA mode với Raft)
       copy:
-        dest: /tmp/{{ vault_policy_name }}.hcl
+        dest: "{{ vault_helm_values_file }}"
         content: |
-          path "secret/data/myapp/*" {
-            capabilities = ["read"]
-          }
-      delegate_to: localhost
+          server:
+            dev:
+              enabled: false
 
-    - name: Write policy to Vault
-      shell: |
-        vault policy write {{ vault_policy_name }} /tmp/{{ vault_policy_name }}.hcl
-      environment:
-        VAULT_ADDR: "{{ vault_addr }}"
+            ha:
+              enabled: true
+              replicas: 3  # Should be at least 3 for production
+              raft:
+                enabled: true
+                setNodeId: true
+                config: |
+                  storage "raft" {
+                    path    = "/vault/data"
+                  }
 
-    - name: Create Vault role linked to Kubernetes service account
+            standalone:
+              enabled: false
+
+            dataStorage:
+              enabled: true
+              storageClass: "{{ vault_storage_class }}"
+              size: 8Gi
+
+            haStorage:
+              raft:
+                enabled: true
+                setNodeId: true
+
+            extraEnvironmentVars:
+              VAULT_LOG_LEVEL: debug
+
+            readinessProbe:
+              enabled: true
+            livenessProbe:
+              enabled: true
+
+          ui:
+            enabled: true
+
+    - name: Cài đặt hoặc nâng cấp Vault bằng Helm
       shell: |
-        vault write auth/{{ vault_k8s_auth_path }}/role/{{ vault_role_name }} \
-          bound_service_account_names={{ vault_sa_name }} \
-          bound_service_account_namespaces={{ vault_sa_namespace }} \
-          policies={{ vault_policy_name }} \
-          ttl=24h
-      environment:
-        VAULT_ADDR: "{{ vault_addr }}"
+        helm upgrade --install {{ vault_release_name }} {{ vault_helm_chart }} \
+          --namespace {{ vault_namespace }} \
+          --version {{ vault_helm_version }} \
+          -f {{ vault_helm_values_file }}
+      args:
+        executable: /bin/bash

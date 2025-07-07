@@ -1,34 +1,60 @@
-- name: Deploy 2 echo apps using http-echo image
+- name: Install Longhorn only on bootstrap node
   become: true
   vars:
-    target_namespace: default
-    echo_apps:
-      - name: my-app-1
-        port: 8080
-        text: "Welcome from my-app-1"
-      - name: my-app-2
-        port: 8080
-        text: "Welcome from my-app-2"
-  environment:
-    KUBECONFIG: /home/namnv/.kube/config
-
+    longhorn_namespace: longhorn-system
   block:
-    - name: Deploy and expose echo apps
-      loop: "{{ echo_apps }}"
-      loop_control:
-        loop_var: app
+    - name: Ensure required packages are installed (Debian-based)
       shell: |
-        kubectl delete deploy {{ app.name }} --ignore-not-found
-        kubectl delete svc {{ app.name }} --ignore-not-found
-
-        kubectl create deploy {{ app.name }} \
-          --image=hashicorp/http-echo \
-          --port={{ app.port }} \
-          -n {{ target_namespace }} \
-          -- /http-echo -listen=:{{ app.port }} -text="{{ app.text }}" -status-code=200 || true
-
-        kubectl expose deploy {{ app.name }} \
-          --port={{ app.port }} --target-port={{ app.port }} \
-          -n {{ target_namespace }} || true
+        sudo apt update
+        sudo apt install -y open-iscsi nfs-common
+        sudo systemctl enable --now iscsid
       args:
         executable: /bin/bash
+
+    - name: Enable and start iscsid service
+      service:
+        name: iscsid
+        enabled: yes
+        state: started
+    - block:
+        - name: Ensure longhorn namespace exists
+          shell: kubectl get ns {{ longhorn_namespace }} || kubectl create ns {{ longhorn_namespace }}
+
+        - name: Add Longhorn Helm repo
+          shell: |
+            helm repo add longhorn https://charts.longhorn.io || true
+            helm repo update
+
+        - name: Install Longhorn via Helm
+          shell: >
+            helm upgrade --install longhorn longhorn/longhorn
+            -n {{ longhorn_namespace }}
+            --set persistence.defaultClassReplicaCount=1
+            --set longhornUI.replicas=1
+
+        - name: Expose Longhorn UI on NodePort 30080
+          shell: >
+            kubectl -n {{ longhorn_namespace }} patch svc longhorn-frontend \
+              -p '{
+                "spec": {
+                  "type": "NodePort",
+                  "ports": [{
+                    "port": 80,
+                    "targetPort": 8000,
+                    "protocol": "TCP",
+                    "nodePort": 30080
+                  }]
+                }
+              }'
+
+
+        - name: Set Longhorn as default StorageClass
+          shell: >
+            kubectl patch storageclass longhorn
+            -p '{
+                  "metadata": {
+                    "annotations": {
+                      "storageclass.kubernetes.io/is-default-class": "true"
+                    }
+                  }
+                }'
