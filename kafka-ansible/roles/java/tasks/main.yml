@@ -1,0 +1,39 @@
+- name: Install Java 17
+  ansible.builtin.yum:
+    name:
+      - java-17-openjdk
+      - java-17-openjdk-devel
+    state: present
+  when: ansible_facts['os_family'] == 'RedHat'
+  become: true
+  tags:
+    - dependencies
+    - java_install
+
+- name: Configure Java alternatives
+  ansible.builtin.shell: |
+    JAVA_PATH=$(find /usr/lib/jvm/ -maxdepth 1 -type d -name "java-17-openjdk*" | head -n1)
+    alternatives --install /usr/bin/java java "$JAVA_PATH/bin/java" 20000
+    alternatives --set java "$JAVA_PATH/bin/java"
+  args:
+    creates: /usr/bin/java
+    executable: /bin/bash
+  become: true
+  tags:
+    - dependencies
+    - java_config
+
+- name: Set JAVA_HOME fact
+  ansible.builtin.shell: readlink -f $(which java) | sed 's:/bin/java::'
+  register: java_home_path
+  changed_when: false
+  tags:
+    - dependencies
+    - java_home
+
+- name: Export JAVA_HOME
+  ansible.builtin.set_fact:
+    java_home: "{{ java_home_path.stdout }}"
+  tags:
+    - dependencies
+    - java_home

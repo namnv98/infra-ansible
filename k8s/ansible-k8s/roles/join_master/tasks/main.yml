@@ -6,4 +6,4 @@
 
 - name: Join control plane
   become: true
-  shell: "{{ join_cmd }}"
+  shell: "{{ join_cmd }}"get

@@ -1,0 +1,1 @@
+ansible-playbook -i inventories/hosts install-kafka.yml --tags "java_home,cleanup,setup_kafka_dir,install,config,kafka_init,start_service"

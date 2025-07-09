@@ -1,0 +1,6 @@
+- name: Setup Kafka Cluster
+  hosts: kafka
+  become: true
+  roles:
+    - java
+    - kafka
