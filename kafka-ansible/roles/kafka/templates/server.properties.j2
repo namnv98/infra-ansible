@@ -1,0 +1,49 @@
+# Nếu có cấu hình process.roles + controller.quorum.voters → Kafka chạy KRaft mode, bỏ qua zookeeper.connect nếu có.
+# Vai trò tiến trình: vừa là broker vừa là controller
+process.roles=broker,controller
+
+# Định danh node trong cụm Kafka (duy nhất và dùng trong controller.quorum.voters)
+node.id={{ kafka_broker_ids[inventory_hostname] }}
+
+# Danh sách broker/controller tham gia bầu chọn controller (quorum voters)
+# example: controller.quorum.voters=1@192.168.1.10:9093,2@192.168.1.11:9093,3@192.168.1.12:9093
+controller.quorum.voters={% for host in groups['kafka'] %}{{ kafka_broker_ids[host] }}@{{ hostvars[host]['ansible_host'] }}:9093{% if not loop.last %},{% endif %}{% endfor %}
+
+# Các giao thức lắng nghe: client và controller
+listeners=PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+
+# Ánh xạ giao thức cho từng listener
+listener.security.protocol.map=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+
+# Giao tiếp giữa các broker sử dụng PLAINTEXT
+inter.broker.listener.name=PLAINTEXT
+
+# Địa chỉ quảng bá cho client
+advertised.listeners=PLAINTEXT://{{ hostvars[inventory_hostname]['ansible_host'] }}:9092
+
+# Tên listener dùng cho controller
+controller.listener.names=CONTROLLER
+
+# Thư mục chứa log dữ liệu Kafka
+log.dirs={{ kafka_data_dir }}/logs
+
+# Thư mục chứa metadata log (KRaft)
+metadata.log.dir={{ kafka_data_dir }}/meta
+
+# Giới hạn kích thước mỗi file segment metadata log (100MB)
+metadata.log.segment.bytes=104857600
+
+# Số luồng xử lý mạng
+num.network.threads=3
+
+# Số luồng xử lý I/O
+num.io.threads=8
+
+# 1GB mỗi file log
+log.segment.bytes=1073741824
+
+# Giữ log 7 ngày
+log.retention.hours=168
+
+# Kiểm tra log cũ cần xoá mỗi 5 phút (ms)
+log.retention.check.interval.ms=300000

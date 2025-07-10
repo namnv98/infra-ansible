@@ -1,0 +1,30 @@
+[Unit]
+Description=Apache Kafka Server (KRaft Mode)
+After=network.target
+
+[Service]
+Type=simple
+
+# Chạy dưới user kafka
+User=kafka
+Group=kafka
+
+# Biến môi trường JAVA_HOME, dùng để tránh lỗi JVM không tìm được Java
+Environment="JAVA_HOME={{ java_home }}"
+
+# Kafka cần chạy trong thư mục cài đặt (để resolve path tương đối)
+WorkingDirectory={{ kafka_install_dir }}
+
+# Lệnh start và stop Kafka
+ExecStart={{ kafka_install_dir }}/bin/kafka-server-start.sh {{ kafka_install_dir }}/config/server.properties
+ExecStop={{ kafka_install_dir }}/bin/kafka-server-stop.sh
+
+# Tự restart nếu lỗi (crash)
+Restart=on-failure
+RestartSec=5
+
+# Tăng giới hạn số file mở (Kafka dùng nhiều socket/file descriptor)
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
