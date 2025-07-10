@@ -1,0 +1,66 @@
+---
+- name: Gỡ hoàn toàn DevStack khỏi Ubuntu
+  hosts: devstack
+  become: true
+
+  vars:
+    devstack_user: stack
+    devstack_home: "/opt/{{ devstack_user }}"
+
+  tasks:
+
+    - name: Dừng tất cả process của user stack
+      shell: |
+        pkill -u {{ devstack_user }} || true
+      ignore_errors: true
+
+    - name: Xóa thư mục devstack, requirements và toàn bộ dữ liệu của stack
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ devstack_home }}/devstack"
+        - "{{ devstack_home }}/requirements"
+        - "/opt/stack"
+        - "/opt/{{ devstack_user }}"
+        - "/etc/sudoers.d/{{ devstack_user }}"
+        - "/etc/systemd/system/devstack@*"
+        - "/var/log/{{ devstack_user }}"
+
+    - name: Xóa user stack
+      user:
+        name: "{{ devstack_user }}"
+        state: absent
+        remove: true
+
+    - name: Xóa Docker container (nếu có container backend như Zun)
+      shell: |
+        docker ps -aq | xargs -r docker rm -f
+      ignore_errors: true
+
+    - name: Xóa Docker network (nếu bị DevStack tạo)
+      shell: |
+        docker network ls -q | xargs -r docker network rm
+      ignore_errors: true
+
+    - name: Gỡ bỏ các gói có thể DevStack cài thêm
+      apt:
+        name:
+          - mariadb-server
+          - rabbitmq-server
+          - etcd
+          - openvswitch-switch
+          - docker.io
+        state: absent
+        purge: true
+        autoremove: true
+
+    - name: Xóa file log DevStack
+      file:
+        path: "/opt/stack/logs"
+        state: absent
+
+    - name: Xóa bridge OVS (nếu có)
+      shell: |
+        ovs-vsctl list-br | xargs -r -n1 ovs-vsctl del-br
+      ignore_errors: true
