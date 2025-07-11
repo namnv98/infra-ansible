@@ -5,7 +5,7 @@
 
   vars:
     devstack_user: stack
-    host_ip: 10.148.0.39
+    host_ip: 10.148.0.41
     admin_pass: admin
 
   tasks:
@@ -42,11 +42,11 @@
         content: "{{ devstack_user }} ALL=(ALL) NOPASSWD: ALL\n"
         mode: '0440'
 
-    - name: Clone DevStack bằng become_user thật sự
-      become_user: "{{ devstack_user }}"
-      git:
-        repo: https://opendev.org/openstack/devstack.git
-        dest: "/opt/{{ devstack_user }}/devstack"
+    - name: Clone DevStack repo as stack user (workaround)
+      become: true
+      shell: sudo -u stack git clone https://opendev.org/openstack/devstack.git /opt/stack/devstack
+      args:
+        creates: /opt/stack/devstack/.git
 
 
     - name: Tạo file local.conf (tạm với quyền root)
@@ -67,26 +67,8 @@
         owner: "{{ devstack_user }}"
         group: "{{ devstack_user }}"
 
-    - name: clean /opt/stack/async
-      shell: sudo rm -f /opt/devstack_user/async/*.fifo
-
-    - name: Clone repo requirements nếu chưa tồn tại
-      become_user: "{{ devstack_user }}"
-      shell: |
-        if [ ! -d /opt/{{ devstack_user }}/requirements ]; then
-          git clone https://opendev.org/openstack/requirements.git /opt/{{ devstack_user }}/requirements
-        fi
-
-    - name: Fix quyền requirements
-      file:
-        path: "/opt/{{ devstack_user }}/requirements"
-        owner: "{{ devstack_user }}"
-        group: "{{ devstack_user }}"
-        recurse: true
-
-
     - name: Chạy ./stack.sh dưới user stack (dùng sudo -u)
-      shell: sudo -u {{ devstack_user }} bash -c "cd /opt/{{ devstack_user }}/devstack && ./stack.sh"
-#export TERM=xterm
-#sudo -u stack bash -c "cd /opt/stack/devstack && ./stack.sh"
+      shell: sudo -u stack ./stack.sh
+      args:
+        chdir: "/opt/{{ devstack_user }}/devstack"
 

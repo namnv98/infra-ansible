@@ -18,3 +18,7 @@ ansible-playbook -i inventory.ini devstack.yml
 #openstack server delete vm-01
 #
 
+
+
+
+
