@@ -59,13 +59,13 @@ sudo sysctl -p
 ### 🔐 SSH (port 22 → 172.24.4.61:22)
 
 ```bash
-sudo iptables -t nat -A PREROUTING -d 35.197.146.206 -p tcp --dport 22 -j DNAT --to-destination 172.24.4.61:22
+sudo iptables -t nat -A PREROUTING -d 10.148.0.41 -p tcp --dport 22 -j DNAT --to-destination 172.24.4.61:22
 ```
 
 ### 🌐 HTTP (port 8080 → 172.24.4.61:80)
 
 ```bash
-sudo iptables -t nat -A PREROUTING -d 35.197.146.206 -p tcp --dport 8080 -j DNAT --to-destination 172.24.4.61:80
+sudo iptables -t nat -A PREROUTING -d 10.148.0.41 -p tcp --dport 8080 -j DNAT --to-destination 172.24.4.61:80
 ```
 
 ### 🔁 Cho phép POSTROUTING
