@@ -1,0 +1,76 @@
+- name: Cài đặt containerd từ archive chính thức
+  become: true
+  vars:
+    containerd_bin_dir: "/usr/local/bin"
+    containerd_tar: "containerd-{{ containerd_version }}-linux-{{ arch }}.tar.gz"
+    containerd_url: "https://github.com/containerd/containerd/releases/download/v{{ containerd_version }}/{{ containerd_tar }}"
+    containerd_service_url: "https://raw.githubusercontent.com/containerd/containerd/v{{ containerd_version }}/containerd.service"
+  block:
+
+    - name: Tạo thư mục cần thiết
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - "{{ containerd_bin_dir }}"
+        - /usr/lib/systemd/system
+        - /etc/containerd
+
+    - name: Cài đặt containerd nhị phân
+      block:
+        - name: Tải về containerd archive
+          get_url:
+            url: "{{ containerd_url }}"
+            dest: "/tmp/{{ containerd_tar }}"
+            mode: '0644'
+            timeout: 1800
+
+        - name: Giải nén containerd vào /usr/local
+          unarchive:
+            src: "/tmp/{{ containerd_tar }}"
+            dest: "/usr/local"
+            remote_src: yes
+            mode: '0755'
+
+    - name: Cài đặt runc nhị phân
+      block:
+        - name: Tải runc binary
+          get_url:
+            url: "https://github.com/opencontainers/runc/releases/download/v{{ opencontainers_runc_version }}/runc.amd64"
+            dest: "{{ containerd_bin_dir }}/runc"
+            mode: '0755'
+
+        - name: Đảm bảo quyền thực thi cho runc
+          file:
+            path: "{{ containerd_bin_dir }}/runc"
+            mode: '0755'
+            owner: root
+            group: root
+
+    - name: Sinh và chỉnh sửa file config.toml của containerd
+      block:
+        - name: Tạo file config.toml nếu chưa có
+          shell: "{{ containerd_bin_dir }}/containerd config default > /etc/containerd/config.toml"
+          args:
+            creates: /etc/containerd/config.toml
+
+        - name: Bật SystemdCgroup = true trong config.toml
+          lineinfile:
+            path: /etc/containerd/config.toml
+            insertafter: '^\[plugins."io.containerd.grpc.v1.cri"\.containerd\.runtimes\.runc\]'
+            line: '    SystemdCgroup = true'
+
+    - name: Tải service unit file của containerd
+      get_url:
+        url: "{{ containerd_service_url }}"
+        dest: /usr/lib/systemd/system/containerd.service
+        mode: '0644'
+        timeout: 1800
+
+    - name: Kích hoạt và khởi động containerd
+      systemd:
+        name: containerd
+        enabled: true
+        state: started
+        daemon_reload: true

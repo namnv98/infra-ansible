@@ -1,0 +1,41 @@
+- name: Ensure directories exist
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+  with_items:
+    - /etc/kubernetes
+    - /etc/kubernetes/manifests
+
+- name: Initialize Kubernetes master
+  command: >
+    kubeadm init
+    --pod-network-cidr={{ pod_network_cidr }}
+    --apiserver-cert-extra-sans={{ apiserver_cert_sans | join(',') }}
+    --apiserver-advertise-address={{ apiserver_advertise_address }}
+    --control-plane-endpoint={{ apiserver_advertise_address }}
+    --cri-socket {{ cri_socket }}
+  register: kubeadm_init_output
+
+- name: Hiển thị kết quả kubeadm init
+  debug:
+    var: kubeadm_init_output.stdout_lines
+
+- name: Wait for Kubernetes API server to be ready
+  uri:
+    url: https://localhost:6443/healthz
+    method: GET
+    status_code: 200
+    validate_certs: no
+  register: result
+  retries: 10
+  delay: 6
+  until: result.status == 200
+
+- name: Copy kubeconfig for user namnv
+  become: true
+  become_user: namnv
+  shell: |
+    mkdir -p /home/namnv/.kube
+    cp -f /etc/kubernetes/admin.conf /home/namnv/.kube/config
+    chown -R namnv:namnv /home/namnv/.kube

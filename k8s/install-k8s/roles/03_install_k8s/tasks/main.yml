@@ -1,0 +1,60 @@
+- name: Cài đặt Kubernetes binaries (online)
+  become: true
+  vars:
+    kube_bin_dir: /usr/local/bin
+    cni_bin_dir: /opt/cni/bin
+    kubelet_systemd_dir: /usr/lib/systemd/system/kubelet.service.d
+    kube_binaries: [ kubeadm, kubelet, kubectl ]
+  block:
+
+    - name: Tạo thư mục cần thiết
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - "{{ cni_bin_dir }}"
+        - "{{ kube_bin_dir }}"
+        - "{{ kubelet_systemd_dir }}"
+
+    - name: Cài đặt CNI plugin
+      unarchive:
+        src: "https://github.com/containernetworking/plugins/releases/download/v{{ cni_plugins_version }}/cni-plugins-linux-{{ arch }}-v{{ cni_plugins_version }}.tgz"
+        dest: "{{ cni_bin_dir }}"
+        remote_src: yes
+        mode: '0755'
+
+    - name: Cài đặt crictl
+      unarchive:
+        src: "https://github.com/kubernetes-sigs/cri-tools/releases/download/v{{ crictl_version }}/crictl-v{{ crictl_version }}-linux-{{ arch }}.tar.gz"
+        dest: "{{ kube_bin_dir }}"
+        remote_src: yes
+        mode: '0755'
+
+    - name: Cài đặt các binary Kubernetes {{ kubernetes_version }}
+      get_url:
+        url: "https://dl.k8s.io/release/v{{ kubernetes_version }}/bin/linux/{{ arch }}/{{ item }}"
+        dest: "{{ kube_bin_dir }}/{{ item }}"
+        mode: '0755'
+      loop: "{{ kube_binaries }}"
+
+    - name: Cài đặt kubelet.service
+      shell: |
+        curl -sSL "https://raw.githubusercontent.com/kubernetes/release/v{{ kubelet_service_version }}/cmd/krel/templates/latest/kubelet/kubelet.service" |
+        sed "s:/usr/bin:{{ kube_bin_dir }}:g" > /usr/lib/systemd/system/kubelet.service
+      args:
+        executable: /bin/bash
+
+    - name: Cài đặt drop-in config cho kubelet
+      shell: |
+        curl -sSL "https://raw.githubusercontent.com/kubernetes/release/v{{ kubelet_service_version }}/cmd/krel/templates/latest/kubeadm/10-kubeadm.conf" |
+        sed "s:/usr/bin:{{ kube_bin_dir }}:g" > /usr/lib/systemd/system/kubelet.service.d/10-kubeadm.conf
+      args:
+        executable: /bin/bash
+
+    - name: Reload systemd và bật kubelet
+      systemd:
+        daemon_reload: yes
+        name: kubelet
+        enabled: yes
+        state: started
