@@ -1,0 +1,89 @@
+- name: Ensure namespaces exist
+  shell: kubectl create namespace {{ item }} --dry-run=client -o yaml | kubectl apply -f -
+  loop: "{{ k8s_rbac_namespaces }}"
+  args:
+    _uses_shell: true
+
+- name: Ensure ServiceAccounts exist
+  shell: |
+    kubectl apply -f - <<EOF
+    apiVersion: v1
+    kind: ServiceAccount
+    metadata:
+      name: {{ item2.value[0] }}
+      namespace: {{ item2.key }}
+    EOF
+  loop: "{{ k8s_rbac_serviceaccounts | dict2items }}"
+  loop_control:
+    loop_var: item2
+  args:
+    _uses_shell: true
+
+
+- name: Apply namespace-scoped Roles and RoleBindings
+  shell: kubectl apply -f -
+  args:
+    stdin: "{{ lookup('template', 'role_ns.yaml.j2') }}"
+    _uses_shell: true
+
+- name: Apply cluster-scoped ClusterRoles and ClusterRoleBindings
+  shell: kubectl apply -f -
+  args:
+    stdin: "{{ lookup('template', 'clusterrole.yaml.j2') }}"
+    _uses_shell: true
+
+- name: Ensure remote kubeconfig directory exists
+  file:
+    path: "{{ kubeconfig_dir | default('/tmp/kubeconfigs') }}"
+    state: directory
+    mode: '0755'
+
+- name: Generate kubeconfig for each ServiceAccount
+  shell: |
+    KUBECONFIG_FILE="{{ kubeconfig_dir | default('/tmp/kubeconfigs') }}/{{ item2.value[0] }}.kubeconfig"
+
+    # Lấy token thật từ ServiceAccount
+    TOKEN=$(kubectl create token {{ item2.value[0] }} -n {{ item2.key }})
+
+    # Lấy nội dung CA base64
+    CA_DATA=$(cat /etc/kubernetes/pki/ca.crt | base64 | tr -d '\n')
+
+    # Tạo kubeconfig với certificate-authority-data
+        # Embed certificate trực tiếp từ file
+    kubectl config set-cluster sa-cluster \
+    --server=https://192.168.56.10:6443 \
+    --certificate-authority=/etc/kubernetes/pki/ca.crt \
+    --embed-certs=true \
+    --kubeconfig=$KUBECONFIG_FILE
+
+    kubectl config set-credentials {{ item2.value[0] }} \
+      --token="$TOKEN" \
+      --kubeconfig=$KUBECONFIG_FILE
+
+    kubectl config set-context {{ item2.value[0] }}-context \
+      --cluster=sa-cluster --namespace={{ item2.key }} --user={{ item2.value[0] }} \
+      --kubeconfig=$KUBECONFIG_FILE
+
+    kubectl config use-context {{ item2.value[0] }}-context --kubeconfig=$KUBECONFIG_FILE
+  loop: "{{ k8s_rbac_serviceaccounts | dict2items }}"
+  loop_control:
+    loop_var: item2
+  args:
+    _uses_shell: true
+  changed_when: false
+
+- name: Ensure local kubeconfigs folder exists
+  file:
+    path: ./kubeconfigs
+    state: directory
+    mode: '0755'
+  delegate_to: localhost
+
+- name: Fetch kubeconfig files to local
+  fetch:
+    src: "{{ kubeconfig_dir | default('/tmp/kubeconfigs') }}/{{ item2.value[0] }}.kubeconfig"
+    dest: "./kubeconfigs/{{ item2.value[0] }}.kubeconfig"
+    flat: yes
+  loop: "{{ k8s_rbac_serviceaccounts | dict2items }}"
+  loop_control:
+    loop_var: item2
