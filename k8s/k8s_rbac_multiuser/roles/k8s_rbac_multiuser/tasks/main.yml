@@ -37,40 +37,47 @@
     path: "{{ kubeconfig_dir | default('/tmp/kubeconfigs') }}"
     state: directory
     mode: '0755'
-
-- name: Generate kubeconfig for each ServiceAccount
+- name: Generate kubeconfig for each user
+  vars:
+    # Tìm team chứa user hiện tại (trả về key)
+    team_for_user: "{{ (k8s_rbac_users | dict2items | selectattr('value', 'contains', item) | map(attribute='key') | first) }}"
+    # Lấy namespace tương ứng team
+    ns_for_user: "{{ k8s_rbac_team_namespace[team_for_user] }}"
+    # Lấy serviceaccount đầu tiên của namespace đó
+    sa_for_user: "{{ (k8s_rbac_serviceaccounts[ns_for_user] | first) }}"
   shell: |
-    KUBECONFIG_FILE="{{ kubeconfig_dir | default('/tmp/kubeconfigs') }}/{{ item2.value[0] }}.kubeconfig"
+    USER="{{ item }}"
+    TEAM="{{ team_for_user }}"
+    NAMESPACE="{{ ns_for_user }}"
+    SA="{{ sa_for_user }}"
+    KUBECONFIG_FILE="{{ kubeconfig_dir | default('/tmp/kubeconfigs') }}/{{ item }}.kubeconfig"
 
-    # Lấy token thật từ ServiceAccount
-    TOKEN=$(kubectl create token {{ item2.value[0] }} -n {{ item2.key }})
+    echo "[INFO] Generating kubeconfig for user=$USER (team=$TEAM ns=$NAMESPACE sa=$SA)"
 
-    # Lấy nội dung CA base64
-    CA_DATA=$(cat /etc/kubernetes/pki/ca.crt | base64 | tr -d '\n')
+    TOKEN=$(kubectl -n "$NAMESPACE" create token "$SA")
 
-    # Tạo kubeconfig với certificate-authority-data
-        # Embed certificate trực tiếp từ file
-    kubectl config set-cluster sa-cluster \
-    --server=https://192.168.56.10:6443 \
-    --certificate-authority=/etc/kubernetes/pki/ca.crt \
-    --embed-certs=true \
-    --kubeconfig=$KUBECONFIG_FILE
+    kubectl config set-cluster user-cluster \
+      --server=https://192.168.56.10:6443 \
+      --certificate-authority=/etc/kubernetes/pki/ca.crt \
+      --embed-certs=true \
+      --kubeconfig="$KUBECONFIG_FILE"
 
-    kubectl config set-credentials {{ item2.value[0] }} \
+    kubectl config set-credentials "$USER" \
       --token="$TOKEN" \
-      --kubeconfig=$KUBECONFIG_FILE
+      --kubeconfig="$KUBECONFIG_FILE"
 
-    kubectl config set-context {{ item2.value[0] }}-context \
-      --cluster=sa-cluster --namespace={{ item2.key }} --user={{ item2.value[0] }} \
-      --kubeconfig=$KUBECONFIG_FILE
+    kubectl config set-context "$USER-context" \
+      --cluster=user-cluster \
+      --namespace="$NAMESPACE" \
+      --user="$USER" \
+      --kubeconfig="$KUBECONFIG_FILE"
 
-    kubectl config use-context {{ item2.value[0] }}-context --kubeconfig=$KUBECONFIG_FILE
-  loop: "{{ k8s_rbac_serviceaccounts | dict2items }}"
-  loop_control:
-    loop_var: item2
+    kubectl config use-context "$USER-context" --kubeconfig="$KUBECONFIG_FILE"
+  loop: "{{ k8s_rbac_users.values() | flatten | unique }}"
   args:
-    _uses_shell: true
+    executable: /bin/bash
   changed_when: false
+
 
 - name: Ensure local kubeconfigs folder exists
   file:
@@ -79,11 +86,9 @@
     mode: '0755'
   delegate_to: localhost
 
-- name: Fetch kubeconfig files to local
+- name: Fetch kubeconfig files for users
   fetch:
-    src: "{{ kubeconfig_dir | default('/tmp/kubeconfigs') }}/{{ item2.value[0] }}.kubeconfig"
-    dest: "./kubeconfigs/{{ item2.value[0] }}.kubeconfig"
+    src: "{{ kubeconfig_dir | default('/tmp/kubeconfigs') }}/{{ item }}.kubeconfig"
+    dest: "./kubeconfigs/{{ item }}.kubeconfig"
     flat: yes
-  loop: "{{ k8s_rbac_serviceaccounts | dict2items }}"
-  loop_control:
-    loop_var: item2
+  loop: "{{ k8s_rbac_users.values() | flatten | unique }}"

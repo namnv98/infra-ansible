@@ -1,4 +1,3 @@
----
 # Namespace setup
 k8s_rbac_namespaces:
   - dev
@@ -15,6 +14,12 @@ k8s_rbac_users:
   monitoring-team:
     - eve
 
+# Map team → namespace
+k8s_rbac_team_namespace:
+  dev-team: dev
+  ops-team: prod
+  monitoring-team: prod   # ví dụ thôi, bạn đổi nếu cần
+
 # ServiceAccounts per namespace
 k8s_rbac_serviceaccounts:
   dev:
@@ -29,13 +34,13 @@ k8s_rbac_roles_ns:
       resources: ["pods"]
       verbs: ["get","list","watch"]
       users: ["dev-team"]
-      serviceaccounts: ["dev-sa"]  # đúng tên SA
+      serviceaccounts: ["dev-sa"]
   prod:
     ops-manager:
-      resources: ["deployments","services","pods"]  # thêm pods nếu muốn SA đọc pods
+      resources: ["deployments","services","pods"]
       verbs: ["get","list","create","update","delete"]
       users: ["ops-team"]
-      serviceaccounts: ["ops-sa"]  # đúng tên SA
+      serviceaccounts: ["ops-sa"]
 
 # Cluster-scoped Roles
 k8s_rbac_roles_cluster:
