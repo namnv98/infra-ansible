@@ -1,0 +1,21 @@
+# Danh sách namespace cần tạo
+k8s_rbac_namespaces:
+  - dev
+  - prod
+
+# Định nghĩa group + quyền + user (group-centric)
+k8s_rbac_groups:
+  dev-team:
+    namespaces: ["dev"]
+    verbs: ["get", "list", "watch", "create", "update", "delete"]
+    resources: ["pods", "services", "configmaps", "deployments"]
+    users: ["alice"]
+
+  ops-team:
+    namespaces: ["dev", "prod"]
+    verbs: ["*"]
+    resources: ["*"]
+    users: ["charlie"]
+
+# Đường dẫn lưu kubeconfig sinh ra
+kubeconfig_dir: /tmp/kubeconfigs
