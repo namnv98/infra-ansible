@@ -72,3 +72,6 @@
         name: kubelet
         enabled: yes
         state: started
+
+    - name: Pre-pull kubeadm images
+      command: kubeadm config images pull

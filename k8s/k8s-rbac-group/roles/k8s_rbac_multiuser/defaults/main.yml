@@ -1,3 +1,12 @@
+
+kube_cluster_name: user-cluster
+kube_apiserver_url: "https://192.168.56.10:6443"
+kube_ca_path: "/etc/kubernetes/pki/ca.crt"
+kubeconfig_dir: "/tmp/kubeconfigs"
+
+# Token lifetime (1 năm)
+kube_token_duration: "8760h"
+
 # Danh sách namespace cần tạo
 k8s_rbac_namespaces:
   - dev
@@ -7,15 +16,18 @@ k8s_rbac_namespaces:
 k8s_rbac_groups:
   dev-team:
     namespaces: ["dev"]
-    verbs: ["get", "list", "watch", "create", "update", "delete"]
-    resources: ["pods", "services", "configmaps", "deployments"]
+    verbs: ["get", "list", "watch"]
+    resources: ["pods", "configmaps"]
     users: ["alice"]
 
   ops-team:
     namespaces: ["dev", "prod"]
-    verbs: ["*"]
-    resources: ["*"]
+    verbs: ["get", "list", "watch", "create", "update", "delete"]
+    resources: ["pods", "services", "configmaps", "deployments"]
     users: ["charlie"]
 
-# Đường dẫn lưu kubeconfig sinh ra
-kubeconfig_dir: /tmp/kubeconfigs
+  admin-team:
+    namespaces: "*"
+    verbs: [ "*" ]
+    resources: [ "*" ]
+    users: [ "admin" ]

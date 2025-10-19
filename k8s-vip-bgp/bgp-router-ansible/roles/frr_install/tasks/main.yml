@@ -1,0 +1,62 @@
+---
+- name: Wait for apt lock to be released
+  shell: |
+    while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
+      echo "⚙️ Waiting for apt lock to be released..."
+      sleep 5
+    done
+  changed_when: false
+
+- name: Install dependencies for repo setup
+  apt:
+    name:
+      - curl
+      - gnupg2
+    state: present
+    update_cache: yes
+
+- name: Wait for apt lock to be released before adding GPG key
+  shell: |
+    while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
+      echo "⚙️ Waiting for apt lock to be released..."
+      sleep 5
+    done
+  changed_when: false
+
+- name: Add FRRouting GPG key
+  apt_key:
+    url: https://deb.frrouting.org/frr/keys.asc
+    state: present
+
+- name: Add FRRouting APT repository
+  shell: |
+    . /etc/os-release && echo "deb https://deb.frrouting.org/frr $VERSION_CODENAME frr-stable" > /etc/apt/sources.list.d/frr.list
+  args:
+    creates: /etc/apt/sources.list.d/frr.list
+
+- name: Wait for apt lock to be released before updating cache
+  shell: |
+    while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
+      echo "⚙️ Waiting for apt lock to be released..."
+      sleep 5
+    done
+  changed_when: false
+
+- name: Update apt cache after adding FRR repo
+  apt:
+    update_cache: yes
+
+- name: Wait for apt lock to be released before installing FRR
+  shell: |
+    while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
+      echo "⚙️ Waiting for apt lock to be released..."
+      sleep 5
+    done
+  changed_when: false
+
+- name: Install FRRouting packages
+  apt:
+    name:
+      - frr
+      - frr-pythontools
+    state: present

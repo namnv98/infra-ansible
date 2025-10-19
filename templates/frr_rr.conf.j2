@@ -1,0 +1,23 @@
+!
+hostname ROUTE-REFLECTOR
+!
+router bgp 65000
+  bgp router-id 192.168.56.20
+  no bgp ebgp-requires-policy
+
+  neighbor 192.168.56.10 remote-as 65000
+  neighbor 192.168.56.10 update-source 192.168.56.20
+  neighbor 192.168.56.10 route-reflector-client
+  neighbor 192.168.56.10 next-hop-self
+
+  neighbor 192.168.56.12 remote-as 65000
+  neighbor 192.168.56.12 update-source 192.168.56.20
+  neighbor 192.168.56.12 route-reflector-client
+  neighbor 192.168.56.12 next-hop-self
+
+  address-family ipv4 unicast
+    network 192.168.56.100/32
+  exit-address-family
+!
+exit
+write memory

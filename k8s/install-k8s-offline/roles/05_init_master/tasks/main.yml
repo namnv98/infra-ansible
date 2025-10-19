@@ -1,11 +1,9 @@
-- name: Ensure directories exist
-  file:
-    path: "{{ item }}"
-    state: directory
-    mode: '0755'
-  with_items:
-    - /etc/kubernetes
-    - /etc/kubernetes/manifests
+
+
+- name: Kube VIP Issue #684 workaround - sửa đường dẫn kubeconfig sang super-admin.conf
+  ansible.builtin.command: >
+    sed -i 's|path: /etc/kubernetes/admin.conf|path: /etc/kubernetes/super-admin.conf|' /etc/kubernetes/manifests/kube-vip.yaml
+  become: true
 
 - name: Initialize Kubernetes master
   command: >
@@ -13,9 +11,14 @@
     --pod-network-cidr={{ pod_network_cidr }}
     --apiserver-cert-extra-sans={{ apiserver_cert_sans | join(',') }}
     --apiserver-advertise-address={{ apiserver_advertise_address }}
-    --control-plane-endpoint={{ apiserver_advertise_address }}
+    --control-plane-endpoint={{ vip_address }}
     --cri-socket {{ cri_socket }}
   register: kubeadm_init_output
+
+- name: Revert Kube VIP Issue #684 workaround - dùng lại admin.conf
+  ansible.builtin.command: >
+    sed -i 's|path: /etc/kubernetes/super-admin.conf|path: /etc/kubernetes/admin.conf|' /etc/kubernetes/manifests/kube-vip.yaml
+  become: true
 
 - name: Hiển thị kết quả kubeadm init
   debug:

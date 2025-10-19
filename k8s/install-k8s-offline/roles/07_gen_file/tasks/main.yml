@@ -68,3 +68,5 @@
   loop:
     - /tmp/join_worker.sh.j2
     - /tmp/join_master.sh.j2
+    - /etc/kubernetes/admin.conf
+    - /etc/kubernetes/manifests/kube-vip.yaml

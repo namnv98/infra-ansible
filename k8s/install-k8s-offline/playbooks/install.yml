@@ -8,6 +8,7 @@
     - 02_containerd
     - 03_install_k8s
     - 04_set_node_ip
+    - kube_vip
 
 - name: Initialize only primary master
   hosts: master

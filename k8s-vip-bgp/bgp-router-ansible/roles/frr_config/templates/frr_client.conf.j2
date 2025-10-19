@@ -1,0 +1,16 @@
+!
+hostname {{ inventory_hostname | upper }}
+!
+router bgp {{ bgp_asn }}
+  bgp router-id {{ router_id }}
+  no bgp ebgp-requires-policy
+
+  neighbor {{ neighbor_ip }} remote-as {{ neighbor_as }}
+  neighbor {{ neighbor_ip }} update-source {{ router_id }}
+
+  address-family ipv4 unicast
+    network {{ advertised_network }}
+  exit-address-family
+!
+exit
+write memory
