@@ -1,2 +1,2 @@
 vagrant destroy -f
-#vagrant up
+vagrant up

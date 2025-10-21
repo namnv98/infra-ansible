@@ -1,0 +1,19 @@
+name: {{ etcd_name }}
+data-dir: {{ etcd_data_dir }}
+listen-peer-urls: https://{{ etcd_listen_ip }}:{{ etcd_listen_peer_port }}
+listen-client-urls: https://{{ etcd_listen_ip }}:{{ etcd_listen_client_port }},https://127.0.0.1:2379
+advertise-client-urls: https://{{ etcd_listen_ip }}:{{ etcd_listen_client_port }}
+initial-advertise-peer-urls: https://{{ etcd_listen_ip }}:{{ etcd_listen_peer_port }}
+initial-cluster: {{ etcd_name }}=https://{{ etcd_listen_ip }}:{{ etcd_listen_peer_port }}
+initial-cluster-token: {{ etcd_initial_cluster_token }}
+initial-cluster-state: new
+client-transport-security:
+  cert-file: {{ etcd_conf_dir }}/pki/server.crt
+  key-file: {{ etcd_conf_dir }}/pki/server.key
+  client-cert-auth: true
+  trusted-ca-file: {{ etcd_conf_dir }}/pki/ca.crt
+peer-transport-security:
+  cert-file: {{ etcd_conf_dir }}/pki/server.crt
+  key-file: {{ etcd_conf_dir }}/pki/server.key
+  peer-client-cert-auth: true
+  trusted-ca-file: {{ etcd_conf_dir }}/pki/ca.crt
