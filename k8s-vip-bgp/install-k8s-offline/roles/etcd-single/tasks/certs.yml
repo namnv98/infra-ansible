@@ -1,0 +1,51 @@
+---
+- name: Create PKI dir
+  ansible.builtin.file:
+    path: "{{ etcd_conf_dir }}/pki"
+    state: directory
+    mode: 0700
+
+- name: Generate CA key
+  ansible.builtin.command:
+    cmd: openssl genrsa -out {{ etcd_conf_dir }}/pki/ca.key 2048
+  args:
+    creates: "{{ etcd_conf_dir }}/pki/ca.key"
+
+- name: Generate CA cert
+  ansible.builtin.command:
+    cmd: >
+      openssl req -x509 -new -nodes
+      -key {{ etcd_conf_dir }}/pki/ca.key
+      -subj "/CN=etcd-ca"
+      -days 3650
+      -out {{ etcd_conf_dir }}/pki/ca.crt
+  args:
+    creates: "{{ etcd_conf_dir }}/pki/ca.crt"
+
+- name: Generate server key
+  ansible.builtin.command:
+    cmd: openssl genrsa -out {{ etcd_conf_dir }}/pki/server.key 2048
+  args:
+    creates: "{{ etcd_conf_dir }}/pki/server.key"
+
+- name: Generate CSR
+  ansible.builtin.command:
+    cmd: >
+      openssl req -new
+      -key {{ etcd_conf_dir }}/pki/server.key
+      -subj "/CN={{ etcd_name }}"
+      -out {{ etcd_conf_dir }}/pki/server.csr
+  args:
+    creates: "{{ etcd_conf_dir }}/pki/server.csr"
+
+- name: Sign server cert
+  ansible.builtin.command:
+    cmd: >
+      openssl x509 -req -in {{ etcd_conf_dir }}/pki/server.csr
+      -CA {{ etcd_conf_dir }}/pki/ca.crt
+      -CAkey {{ etcd_conf_dir }}/pki/ca.key
+      -CAcreateserial
+      -out {{ etcd_conf_dir }}/pki/server.crt
+      -days 3650
+  args:
+    creates: "{{ etcd_conf_dir }}/pki/server.crt"

@@ -1,0 +1,32 @@
+---
+- name: Ensure etcd user exists
+  ansible.builtin.user:
+    name: "{{ etcd_user }}"
+    system: yes
+    shell: /sbin/nologin
+
+- name: Create directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ etcd_user }}"
+    group: "{{ etcd_group }}"
+    mode: 0755
+  loop:
+    - "{{ etcd_data_dir }}"
+    - "{{ etcd_conf_dir }}"
+
+- name: Extract etcd binary
+  ansible.builtin.unarchive:
+    src: "etcd-{{ etcd_version }}-linux-amd64.tar.gz"
+    dest: /tmp
+    remote_src: yes
+
+- name: Copy binaries
+  ansible.builtin.copy:
+    src: "/tmp/etcd-{{ etcd_version }}-linux-amd64/{{ item }}"
+    dest: "{{ etcd_install_dir }}/{{ item }}"
+    mode: 0755
+  loop:
+    - etcd
+    - etcdctl

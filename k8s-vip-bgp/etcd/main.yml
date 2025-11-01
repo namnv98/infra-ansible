@@ -1,0 +1,239 @@
+- name: Install and configure ETCD with TLS (single-node, SANs)
+  hosts: etcd
+  become: yes
+  vars:
+    etcd_version: "v3.5.23"
+    etcd_user: "etcd"
+    etcd_group: "etcd"
+    etcd_install_dir: "/usr/local/bin"
+    etcd_data_dir: "/var/lib/etcd"
+    etcd_conf_dir: "/etc/etcd"
+    etcd_name: "{{ inventory_hostname }}"
+    pki_dir: "{{ etcd_conf_dir }}/pki"
+    node_ip: "{{ ansible_host }}"
+    # TLS URLs
+    listen_peer_urls: "https://{{ node_ip }}:2380"
+    listen_client_urls: "https://{{ node_ip }}:2379"
+    advertise_client_urls: "https://{{ node_ip }}:2379"
+    initial_advertise_peer_urls: "https://{{ node_ip }}:2380"
+    initial_cluster: "{{ etcd_name }}=https://{{ node_ip }}:2380"
+
+  tasks:
+    - name: Create etcd user
+      ansible.builtin.user:
+        name: "{{ etcd_user }}"
+        system: yes
+        shell: /sbin/nologin
+
+    - name: Create directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ etcd_user }}"
+        group: "{{ etcd_group }}"
+        mode: "0755"
+      loop:
+        - "{{ etcd_data_dir }}"
+        - "{{ etcd_conf_dir }}"
+        - "{{ pki_dir }}"
+
+    # ---------------- CA ----------------
+    - name: Generate CA key
+      ansible.builtin.command:
+        cmd: openssl genrsa -out {{ pki_dir }}/ca.key 4096
+      args:
+        creates: "{{ pki_dir }}/ca.key"
+
+    - name: Generate CA certificate
+      ansible.builtin.command:
+        cmd: openssl req -x509 -new -nodes -key {{ pki_dir }}/ca.key -subj "/CN=etcd-ca" -days 3650 -out {{ pki_dir }}/ca.crt
+      args:
+        creates: "{{ pki_dir }}/ca.crt"
+
+    # ---------------- Server cert ----------------
+    - name: Generate server key
+      ansible.builtin.command:
+        cmd: openssl genrsa -out {{ pki_dir }}/server.key 4096
+      args:
+        creates: "{{ pki_dir }}/server.key"
+
+    - name: Create server openssl config with SAN
+      ansible.builtin.copy:
+        dest: "{{ pki_dir }}/server-openssl.cnf"
+        content: |
+          [req]
+          default_bits = 4096
+          prompt = no
+          default_md = sha256
+          distinguished_name = dn
+          req_extensions = SAN
+
+          [dn]
+          CN = {{ etcd_name }}
+
+          [SAN]
+          subjectAltName = IP:{{ node_ip }}, DNS:{{ etcd_name }}
+
+    - name: Generate server CSR with SANs
+      ansible.builtin.command:
+        cmd: >
+          openssl req -new -key {{ pki_dir }}/server.key
+          -out {{ pki_dir }}/server.csr
+          -config {{ pki_dir }}/server-openssl.cnf
+      args:
+        creates: "{{ pki_dir }}/server.csr"
+
+    - name: Generate server certificate signed by CA with SANs
+      ansible.builtin.command:
+        cmd: >
+          openssl x509 -req -in {{ pki_dir }}/server.csr
+          -CA {{ pki_dir }}/ca.crt -CAkey {{ pki_dir }}/ca.key -CAcreateserial
+          -out {{ pki_dir }}/server.crt -days 3650
+          -extensions SAN -extfile {{ pki_dir }}/server-openssl.cnf
+      args:
+        creates: "{{ pki_dir }}/server.crt"
+
+    # ---------------- Client cert for kubeadm ----------------
+    - name: Generate client key
+      ansible.builtin.command:
+        cmd: openssl genrsa -out {{ pki_dir }}/client.key 4096
+      args:
+        creates: "{{ pki_dir }}/client.key"
+
+    - name: Generate client CSR
+      ansible.builtin.command:
+        cmd: >
+          openssl req -new -key {{ pki_dir }}/client.key
+          -subj "/CN=kube-etcd-client"
+          -out {{ pki_dir }}/client.csr
+      args:
+        creates: "{{ pki_dir }}/client.csr"
+
+    - name: Sign client certificate with CA
+      ansible.builtin.command:
+        cmd: >
+          openssl x509 -req -in {{ pki_dir }}/client.csr
+          -CA {{ pki_dir }}/ca.crt -CAkey {{ pki_dir }}/ca.key -CAcreateserial
+          -out {{ pki_dir }}/client.crt -days 3650
+      args:
+        creates: "{{ pki_dir }}/client.crt"
+
+    - name: Set correct permissions for certs/keys
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        owner: etcd
+        group: etcd
+        mode: "{{ item.mode }}"
+      loop:
+        - { path: "{{ pki_dir }}/ca.key", mode: "0600" }
+        - { path: "{{ pki_dir }}/server.key", mode: "0600" }
+        - { path: "{{ pki_dir }}/client.key", mode: "0600" }
+        - { path: "{{ pki_dir }}/ca.crt", mode: "0644" }
+        - { path: "{{ pki_dir }}/server.crt", mode: "0644" }
+        - { path: "{{ pki_dir }}/client.crt", mode: "0644" }
+        - { path: "{{ pki_dir }}/server.csr", mode: "0644" }
+        - { path: "{{ pki_dir }}/client.csr", mode: "0644" }
+        - { path: "{{ pki_dir }}/server-openssl.cnf", mode: "0644" }
+
+    # ---------------- ETCD Binaries ----------------
+    - name: Download ETCD binary
+      ansible.builtin.get_url:
+        url: "https://github.com/etcd-io/etcd/releases/download/{{ etcd_version }}/etcd-{{ etcd_version }}-linux-amd64.tar.gz"
+        dest: "/tmp/etcd-{{ etcd_version }}-linux-amd64.tar.gz"
+        mode: '0644'
+
+    - name: Extract ETCD binary
+      ansible.builtin.unarchive:
+        src: "/tmp/etcd-{{ etcd_version }}-linux-amd64.tar.gz"
+        dest: "/tmp"
+        remote_src: yes
+        creates: "/tmp/etcd-{{ etcd_version }}-linux-amd64"
+
+    - name: Copy ETCD binaries to install dir
+      ansible.builtin.copy:
+        src: "/tmp/etcd-{{ etcd_version }}-linux-amd64/{{ item }}"
+        dest: "{{ etcd_install_dir }}/{{ item }}"
+        mode: '0755'
+        remote_src: yes
+      loop:
+        - etcd
+        - etcdctl
+
+    # ---------------- Systemd Service ----------------
+    - name: Create etcd systemd service with TLS
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/etcd.service
+        content: |
+          [Unit]
+          Description=etcd key-value store
+          Documentation=https://etcd.io/docs/
+          After=network.target
+
+          [Service]
+          User={{ etcd_user }}
+          Type=notify
+          ExecStart={{ etcd_install_dir }}/etcd \
+            --name {{ etcd_name }} \
+            --data-dir {{ etcd_data_dir }} \
+            --listen-peer-urls {{ listen_peer_urls }} \
+            --listen-client-urls {{ listen_client_urls }} \
+            --initial-advertise-peer-urls {{ initial_advertise_peer_urls }} \
+            --advertise-client-urls {{ advertise_client_urls }} \
+            --initial-cluster {{ initial_cluster }} \
+            --initial-cluster-state new \
+            --cert-file={{ pki_dir }}/server.crt \
+            --key-file={{ pki_dir }}/server.key \
+            --client-cert-auth=true \
+            --trusted-ca-file={{ pki_dir }}/ca.crt \
+            --peer-cert-file={{ pki_dir }}/server.crt \
+            --peer-key-file={{ pki_dir }}/server.key \
+            --peer-client-cert-auth=true \
+            --peer-trusted-ca-file={{ pki_dir }}/ca.crt
+          Restart=always
+          LimitNOFILE=40000
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: yes
+
+    - name: Enable and start etcd service
+      ansible.builtin.systemd:
+        name: etcd
+        enabled: yes
+        state: started
+
+    - name: Wait for etcd HTTPS to be active
+      ansible.builtin.wait_for:
+        port: 2379
+        host: "{{ node_ip }}"
+        delay: 5
+        timeout: 30
+
+    - name: Verify etcd cluster health with TLS
+      ansible.builtin.command: >
+        {{ etcd_install_dir }}/etcdctl --endpoints={{ advertise_client_urls }}
+        --cacert={{ pki_dir }}/ca.crt
+        --cert={{ pki_dir }}/client.crt
+        --key={{ pki_dir }}/client.key
+        endpoint health
+      register: etcd_health
+      retries: 3
+      delay: 5
+      until: etcd_health.rc == 0
+
+    # ---------------- Fetch TLS files về local ----------------
+    - name: Download all ETCD TLS files to local
+      ansible.builtin.fetch:
+        src: "{{ item }}"
+        dest: ./pki/
+        flat: yes
+      loop:
+        - /etc/etcd/pki/ca.crt
+        - /etc/etcd/pki/ca.key
+        - /etc/etcd/pki/server.crt
+        - /etc/etcd/pki/server.key
+        - /etc/etcd/pki/client.crt
+        - /etc/etcd/pki/client.key

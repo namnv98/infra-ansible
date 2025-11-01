@@ -1,0 +1,12 @@
+---
+- name: Include install steps
+  include_tasks: install.yml
+
+- name: Include cert generation
+  include_tasks: certs.yml
+
+- name: Include config file setup
+  include_tasks: config.yml
+
+- name: Include systemd service setup
+  include_tasks: service.yml
